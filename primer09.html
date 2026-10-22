@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="sl">
+
+<!-- Univerza v Mariboru | Fakulteta za organizacijske vede -->
+<!-- Laboratorij za kibernetiko in sisteme za podporo odločanju -->
+<!-- Andrej Škraba CC BY-SA -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABM primer</title>
+</head>
+<body>
+Primer z agenti, razredi in objekti
+<br>
+<canvas id="platno-1" width="500" height="250" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<script>
+"use strict"; // obvezna deklaracija spremenljivk
+
+let can1, plat1; // deklariramo dve novi spremenljivki za platno ("canvas") in kontekst ctx -> plat1
+
+let agentiTabela = []; // spremenljivka tipa Array v katero bomo shranili objekte razreda Agent (polje agentov)
+let številoAgentov = 3; // določimo število agentov
+
+// "boilerplate" koda za platno
+can1 = document.getElementById("platno-1"); // v html delu poiščemo platno-1, spremenljivka can1 sedaj predstavlja objekt platna
+plat1 =  can1.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-1")
+
+plat1.fillStyle = "#ff0000"; // določimo barvo polnila, hex oblika #rrggbb
+
+class Agent{
+    constructor(x, y, xVel, yVel, barva){ // konstruktorska funkcija (ustvari agenta oz. ga "konstruira", t.j. skozi argumente posredujemo pozicijo x, y ter hitrosti xVel in yVel)
+        this.x = x; // spremenljivka za x koordinato
+        this.y = y; // spremenljivka za y koordinato
+        this.xVel = xVel; // hitrost v smeri x
+        this.yVel = yVel; // hitrost v smeri y
+        this.barva = barva; // barva agenta
+    }
+
+    osveži(){ // članska funkcija, članska zato, ker je v razredu
+        this.x = this.x + this.xVel; // koordinato x povečamo za xVel
+        this.y = this.y + this.yVel; // koordinato y povečamo za yVel
+        
+        if(this.x >= 490 || this.x <= 0){ // če smo na desni ali levi strani na robu platna
+            this.xVel = -this.xVel; // obrnemo x smer, če pridemo do konca platna na desni ali levi
+        }
+
+        if(this.y >= 240 || this.y <= 0){ // če smo spodaj ali zgoraj na robu platna
+            this.yVel = -this.yVel; // obrnemo y smer, če pridemo do konca platna spodaj ali zgoraj
+        }
+    }
+
+}
+
+function zanka(){
+    plat1.clearRect(0, 0, can1.width, can1.height); // brišemo celotno platno
+
+    for(let i=0; i<številoAgentov; i++){
+        agentiTabela[i].osveži(); // preračunamo koordinate ter upoštevamo odboj od robov
+        plat1.fillStyle = agentiTabela[i].barva; // preberemo barvo iz članske spremenljivke barva
+        plat1.fillRect(agentiTabela[i].x, agentiTabela[i].y, 10, 10); // x zg. L kot, y zg. L kot, širina, 
+    }
+    
+    setTimeout(zanka, 5); // po času 5 ms se izvede funkcija zanka
+}
+
+agentiTabela[0] = new Agent(200, 100, 0.9, 0.7, "#ff0000"); // ustvarimo agenta pod indeksom [0] v tabeli agentiTabela na koordinatah x=200, y=100, xVel=0.9, yVel=0.7, barva ff0000 (rdeča)
+agentiTabela[1] = new Agent(180, 80, -0.5, 0.6, "#00ff00"); // ustvarimo agenta pod indeksom [1] v tabeli agentiTabela
+agentiTabela[2] = new Agent(220, 90, 0.2, -0.8, "#0000ff"); // ustvarimo agenta pod indeksom [2] v tabeli agentiTabela
+
+zanka(); // klic funkcije zanka() 
+
+</script>
+
+</body>
+</html>
