@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="sl">
+
+<!-- Univerza v Mariboru | Fakulteta za organizacijske vede -->
+<!-- Laboratorij za kibernetiko in sisteme za podporo odločanju -->
+<!-- Andrej Škraba CC BY-SA -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABM primer</title>
+</head>
+<body>
+Primer z agenti, razredi in objekti
+<br>
+
+<canvas id="platno-1" width="500" height="250" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<script>
+"use strict"; // obvezna deklaracija spremenljivk
+
+let can1, plat1; // deklariramo dve novi spremenljivki za platno ("canvas") in kontekst ctx -> plat1
+
+let agentiTabela = []; // spremenljivka tipa Array v katero bomo shranili objekte razreda Agent (polje agentov)
+let številoAgentov = 100; // določimo število agentov
+
+// "boilerplate" koda za platno
+can1 = document.getElementById("platno-1"); // v html delu poiščemo platno-1, spremenljivka can1 sedaj predstavlja objekt platna
+plat1 =  can1.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-1")
+
+plat1.fillStyle = "#ff0000"; // določimo barvo polnila, hex oblika #rrggbb
+
+class Agent{
+    constructor(x, y, xVel, yVel, barva){ // konstruktorska funkcija (ustvari agenta oz. ga "konstruira", t.j. skozi argumente posredujemo pozicijo x, y ter hitrosti xVel in yVel)
+        this.x = x; // spremenljivka za x koordinato
+        this.y = y; // spremenljivka za y koordinato
+        this.xVel = xVel; // hitrost v smeri x
+        this.yVel = yVel; // hitrost v smeri y
+        this.barva = barva; // barva agenta
+    }
+
+    osveži(){ // članska funkcija, članska zato, ker je v razredu
+        this.x = this.x + this.xVel; // koordinato x povečamo za xVel
+        this.y = this.y + this.yVel; // koordinato y povečamo za yVel
+        
+        if(this.x >= 490 || this.x <= 0){ // če smo na desni ali levi strani na robu platna
+            this.xVel = -this.xVel; // obrnemo x smer, če pridemo do konca platna na desni ali levi
+        }
+
+        if(this.y >= 240 || this.y <= 0){ // če smo spodaj ali zgoraj na robu platna
+            this.yVel = -this.yVel; // obrnemo y smer, če pridemo do konca platna spodaj ali zgoraj
+        }
+
+        // če je x manjši od 0 ga postavimo na 0 (da se agent ne potopi v steno)
+        if(this.x < 0){this.x = 0;}
+        // če je y manjši od 0 ga postavimo na 0 (da se agent ne potopi v steno)
+        if(this.y < 0){this.y = 0;}
+        // podobno na drugem koncu platna, če je koordinata večja od širine oz. višine
+        if(this.x > can1.width - 10){this.x = can1.width - 10}; // 10 je širina agenta
+        if(this.y > can1.height - 10){this.y = can1.height - 10}; // 10 je višina agenta
+    }
+
+}
+
+// funkcija, ki preveri bližino agentov
+// določimo razdaljo med agenti
+// preverimo razdaljo vsakega agenta z vsakim agentom
+// v primeru, da sta agenta blizu, glede na podano razdljo trka
+// izvedemo trk
+function preveriBližinoAgentov(){
+    for(let i=0; i<številoAgentov; i++){
+        let A = agentiTabela[i]; // uvedemo novo spremenljivko A zaradi berljivosti kode
+        for(let j=i+1; j<številoAgentov; j++){
+            let B = agentiTabela[j]; // uvedemo novo spremenljivko B zaradi berljivosti kode
+            let dx = B.x - A.x; // razdalja med agentoma po x koordinati
+            let dy = B.y - A.y; // razdalja med agentoma po y koordinati
+            let razdalja = Math.sqrt(dx*dx + dy*dy); // izračunamo razdaljo med agenttoma A in B po Pitagorovem izreku
+
+            // če je razdalja med agentoma manjša 10 od izvedemo trk
+            if(razdalja < 10){ // če je pogoj, da sta agenta dovolj blizu, izpolnjen
+                izvediTrk(i, j); // izvedemo trk med agentoma z indeksoma i in j
+            } 
+        }
+    }
+}
+
+// funkcija, ki izvede trk med agentoma z indeksoma i in j
+function izvediTrk(indeksPrvega, indeksDrugega){
+    let x1 = agentiTabela[indeksPrvega].x; // preberemo x koordinato prvega agenta, uvedemo novo spremenljivko x1 zaradi berljivosti kode
+    let y1 = agentiTabela[indeksPrvega].y; // preberemo y koordinato prvega agenta, uvedemo novo spremenljivko y1 zaradi berljivosti kode
+    let x2 = agentiTabela[indeksDrugega].x; // preberemo x koordinato drugega agenta, uvedemo novo spremenljivko x2 zaradi berljivosti kode
+    let y2 = agentiTabela[indeksDrugega].y; // preberemo y koordinato drugega agenta, uvedemo novo spremenljivko y2 zaradi berljivosti kode
+    let dx = x2 - x1; // razdalja med agentoma po x koordinati
+    let dy = y2 - y1; // razdalja med agentoma po y koordinati
+    let razdalja = Math.sqrt(dx*dx + dy*dy); // izračunamo razdaljo med agentoma A in B po Pitagorovem izreku
+    let razdaljaOdboja = 6; // razdalja, ki določa za koliko se agenta ob trku odbijeta oz. razmakneta drug od drugega po veznici 
+
+    // izračunamo normalizirano razdaljo med agentoma
+    let normX = dx / razdalja; // normalizirana razdalja po x koordinati
+    let normY = dy / razdalja; // normalizirana razdalja po y koordinati
+
+    // določimo sredinsko točko
+    let sredinskaTočkaX = (x1 + x2) / 2; // sredinska točka po x koordinati
+    let sredinskaTočkaY = (y1 + y2) / 2; // sredinska točka po y koordinati
+
+    // določimo nove pozicije
+    agentiTabela[indeksPrvega].x = sredinskaTočkaX - normX * razdaljaOdboja; // nova x koordinata prvega agenta po trku
+    agentiTabela[indeksPrvega].y = sredinskaTočkaY - normY * razdaljaOdboja; // nova y koordinata prvega agenta po trku
+    agentiTabela[indeksDrugega].x = sredinskaTočkaX + normX * razdaljaOdboja; // nova x koordinata drugega agenta po trku
+    agentiTabela[indeksDrugega].y = sredinskaTočkaY + normY * razdaljaOdboja; // nova y koordinata drugega agenta po trku
+
+    // izmenjamo hitrosti med agentoma
+    let tempXVel = agentiTabela[indeksPrvega].xVel; // shranimo x hitrost prvega agenta v začasno spremenljivko
+    let tempYVel = agentiTabela[indeksPrvega].yVel; // shranimo y hitrost prvega agenta v začasno spremenljivko
+    agentiTabela[indeksPrvega].xVel = agentiTabela[indeksDrugega].xVel; // x hitrost prvega agenta postane x hitrost drugega agenta
+    agentiTabela[indeksPrvega].yVel = agentiTabela[indeksDrugega].yVel; // y hitrost prvega agenta postane y hitrost drugega agenta
+    agentiTabela[indeksDrugega].xVel = tempXVel; // x hitrost drugega agenta postane x hitrost prvega agenta (iz začasne spremenljivke)
+    agentiTabela[indeksDrugega].yVel = tempYVel; // y hitrost drugega agenta postane y hitrost prvega agenta (iz začasne spremenljivke)
+
+}
+
+function zanka(){
+    plat1.clearRect(0, 0, can1.width, can1.height); // brišemo celotno platno
+
+    preveriBližinoAgentov(); // preverimo bližino agentov in izvedemo trke, če je potrebno
+
+    for(let i=0; i<agentiTabela.length; i++){
+        agentiTabela[i].osveži(); // preračunamo koordinate ter upoštevamo odboj od robov
+        plat1.fillStyle = agentiTabela[i].barva; // preberemo barvo iz članske spremenljivke barva
+        plat1.fillRect(agentiTabela[i].x, agentiTabela[i].y, 10, 10); // x zg. L kot, y zg. L kot, širina, 
+    }
+    
+    setTimeout(zanka, 5); // po času 5 ms se izvede funkcija zanka
+}
+
+for(let i=0; i<številoAgentov; i++){
+    // kreiramo agente v tabeli agentiTabela z naključnimi koordinatami in naključnimi hitrostmi med -0.5 in +0.5
+    agentiTabela[i] = new Agent(Math.random()*(can1.width - 10), Math.random()*(can1.height - 10), Math.random() - 0.5, Math.random() - 0.5, "#00ff00"); // ustvarimo agenta pod indeksom [i] v tabeli agentiTabela na na naključnih koordinatah x=[0-širina platna], y=[0-višina platna], xVel=[-0.5, 0.5], yVel=[-0.5, 0.5], barva 00ff00 (zeleno)
+}
+
+agentiTabela[0].barva = "#ff0000"; // spremenimo barvo prvega agenta na rdečo
+agentiTabela[1].barva = "#ff0000"; // spremenimo barvo drugega agenta na rdečo
+agentiTabela[2].barva = "#ff0000"; // spremenimo barvo tretjega agenta na rdečo
+
+zanka(); // klic funkcije zanka() 
+
+</script>
+
+</body>
+</html>
