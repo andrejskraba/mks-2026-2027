@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="sl">
+
+<!-- Univerza v Mariboru | Fakulteta za organizacijske vede -->
+<!-- Laboratorij za kibernetiko in sisteme za podporo odločanju -->
+<!-- Andrej Škraba CC BY-SA -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graf</title>
+</head>
+<body>
+Primer z grafom
+<br>
+
+<canvas id="platno-2" width="250" height="250" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<script>
+"use strict"; // obvezna deklaracija spremenljivk
+
+let časovnik; // spremenljivka za delo s funkcijo setTimeout
+
+let graf1; // spremenljivka za objekt razreda Graf
+
+class Graf{ // deklaracija razreda Graf
+    constructor(idPlatna){
+        // "boilerplate" koda za platno
+        this.can2 = document.getElementById(idPlatna); // v html delu poiščemo platno-2, spremenljivka can2 sedaj predstavlja objekt platna
+        this.plat2 =  this.can2.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-2")
+
+        this.maksGrafX = this.can2.width; // določimo maksimalno širino grafa, ki je enaka širini platna
+        this.maksGrafY = this.can2.height; // določimo maksimalno višino grafa, ki je enaka višini platn
+
+        this.plat2.strokeStyle = "#ff0000"; // določimo barvo črte, hex oblika #rrggbb
+
+        this.x = new Array(); // deklariramo "array" oz. polje x, lahko bi zapisali tudi x = []; oglati oklepaji označujejo spremenljivko tipa "array"
+        this.y = new Array(); // deklariramo "array" oz. polje y, lahko bi zapisali tudi y = []; oglati oklepaji označujejo spremenljivko tipa "array"
+
+        // inicializacija vrednosti v "array-u" x
+        for(let i=0; i<this.can2.width; i++){
+            this.x[i] = i; // za x zapišemo vrednosti [0, 1, 2, ...], t.j. vrednosti i-ja
+        }
+    }
+
+    dodajVrednostAliBrišiInDodaj(yVrednost){
+        // če je vektor y poln, odstranimo prvi element in dodamo nov naključni element na konec vektorja y, podobno kot v prejšnjem primeru
+        if(this.y.length >= this.maksGrafX + 1){ // če je platno 10x10 imamo 11x11 točk, zato je tukaj +1
+            this.y.shift() // odstranimo prvi element iz "array-a"
+            this.y.push(yVrednost); // na konec "array-a" y dodamo novo naključno vrednost med 0 in 100    
+        }
+        else{
+            this.y.push(yVrednost); // dokler "array" y ni poln vanj dodajamo oz. potiskamo ("push") nove naključne vrednosti med 0 in 100
+        }
+    }
+
+    izriši(yVrednost){
+        this.dodajVrednostAliBrišiInDodaj(yVrednost); // dodamo novo vrednost v "array" y
+
+        // brišemo platno
+        this.plat2.clearRect(0, 0, this.can2.width, this.can2.height);
+
+        this.plat2.beginPath();
+
+        for(let i=0; i<this.y.length; i++){
+            this.plat2.lineTo(this.x[i], this.can2.height - this.y[i]); // ker je y os orientirana v smeri navzdol moramo pretvoriti vrednosti, npr. iz 10 -> 90 | 100 - 10 = 90 | tokrat namesto fiksne vrednosti 100 uporabimo lastnost   višine platna t.j. can2.height
+        }   
+
+        this.plat2.stroke(); // za prikaz črte na platnu
+    }
+}
+
+function zanka(){
+
+    graf1.izriši(Math.random() * 100); // izrišemo naključno vrednost med 0 in 100
+
+    časovnik = setTimeout(zanka, 10); // ponovimo funkcijo zanka na vsakih 10 ms
+
+}
+
+graf1 = new Graf("platno-2"); // ustvarimo objekt razreda Graf, ki bo uporabljen za izris grafa na platnu z id "platno-2"
+
+zanka(); // zaženemo funkcijo zanka(), le-ta se izvede nato vsakih 10 ms s pomočjo funkcije setTimeout
+
+</script>
+
+</body>
+</html>
