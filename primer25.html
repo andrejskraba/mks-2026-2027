@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="sl">
+
+<!-- Univerza v Mariboru | Fakulteta za organizacijske vede -->
+<!-- Laboratorij za kibernetiko in sisteme za podporo odločanju -->
+<!-- Andrej Škraba CC BY-SA -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABM primer</title>
+</head>
+<body>
+Primer z agenti, razredi in objekti
+<br>
+<button onClick="štartGumb();">Štart</button>
+<button onClick="stop();">Stop</button>
+<button onClick="koračniZagon();">Koračno</button>
+<br>
+
+Čas: <input type = "text" id="polje-s-časom" value="0">
+stopČas: <input type = "text" id="stop-čas" value=5000>
+Rdeči: <input type = "text" id="število-rdečih" value="0">
+Zeleni: <input type = "text" id="število-zelenih" value="0">
+<br>
+Število trkov v koraku: <input type = "text" id="število-trkov-v-koraku" value="0">
+<p></p>
+
+<canvas id="platno-2" width="500" height="100" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<canvas id="graf-2" width="500" height="100" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<canvas id="graf-3" width="500" height="100" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<canvas id="platno-1" width="1000" height="1000" style="border: 1px dashed #099999;"></canvas>
+<br>
+
+<script>
+"use strict"; // obvezna deklaracija spremenljivk
+
+let can1, plat1; // deklariramo dve novi spremenljivki za platno ("canvas") in kontekst ctx -> plat1
+
+let agentiTabela = []; // spremenljivka tipa Array v katero bomo shranili objekte razreda Agent (polje agentov)
+let številoAgentov = 500; // določimo število agentov
+
+let čas = 0; // spremenljivka za spremljanje koraka simulacije
+
+let števecRdečih = 0; // števec rdečih agentov
+let števecZelenih = 0; // števec zelenih agentov
+
+let časovnik; // spremenljivka za delo s funkcijo setTimeout
+let graf1; // spremenljivka za objekt razreda Graf
+let graf2; // spremenljivka za objekt razreda GrafPovprečja
+let graf3; // spremenljivka za graf diskretnih vrednosti (za objekt razreda GrafDiskretnihVrednosti)
+let številoTrkovVkoraku = 0; // število trkov v koraku glede na barvo
+let številoTrkovRdečegaZzelenimVkoraku = 0; // tu štejemo le trke rdeč-zelen
+
+let stopČas; // deklariramo spremenljivko za čas zaustavitve simulacije
+
+// "boilerplate" koda za platno
+can1 = document.getElementById("platno-1"); // v html delu poiščemo platno-1, spremenljivka can1 sedaj predstavlja objekt platna
+plat1 =  can1.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-1")
+
+plat1.fillStyle = "#ff0000"; // določimo barvo polnila, hex oblika #rrggbb
+
+let stikaloKoračniZagon = 0; // indikator, ki pove ali smo v modusu koračne izvedbe
+
+let gumbŠtartPritisnjen = 0; // da onemogočimo večkratni zagon časovnika (setTimeout)
+
+class Agent{
+    constructor(x, y, xVel, yVel, barva){ // konstruktorska funkcija (ustvari agenta oz. ga "konstruira", t.j. skozi argumente posredujemo pozicijo x, y ter hitrosti xVel in yVel)
+        this.x = x; // spremenljivka za x koordinato
+        this.y = y; // spremenljivka za y koordinato
+        this.xVel = xVel; // hitrost v smeri x
+        this.yVel = yVel; // hitrost v smeri y
+        this.barva = barva; // barva agenta
+        this.trk = 0; // spremenljivka, ki določa, ali je agent v določenem koraku trčil
+    }
+
+    osveži(){ // članska funkcija, članska zato, ker je v razredu
+        this.x = this.x + this.xVel; // koordinato x povečamo za xVel
+        this.y = this.y + this.yVel; // koordinato y povečamo za yVel
+        
+        if(this.x >= can1.width - 10 || this.x <= 0){ // če smo na desni ali levi strani na robu platna
+            this.xVel = -this.xVel; // obrnemo x smer, če pridemo do konca platna na desni ali levi
+        }
+
+        if(this.y >= can1.height - 10 || this.y <= 0){ // če smo spodaj ali zgoraj na robu platna
+            this.yVel = -this.yVel; // obrnemo y smer, če pridemo do konca platna spodaj ali zgoraj
+        }
+
+        // če je x manjši od 0 ga postavimo na 0 (da se agent ne potopi v steno)
+        if(this.x < 0){this.x = 0;}
+        // če je y manjši od 0 ga postavimo na 0 (da se agent ne potopi v steno)
+        if(this.y < 0){this.y = 0;}
+        // podobno na drugem koncu platna, če je koordinata večja od širine oz. višine
+        if(this.x > can1.width - 10){this.x = can1.width - 10}; // 10 je širina agenta
+        if(this.y > can1.height - 10){this.y = can1.height - 10}; // 10 je višina agenta
+    }
+
+}
+
+// **********************************************************
+// razred Graf za izris grafa s številom agentov
+// **********************************************************
+class Graf{ // deklaracija razreda Graf
+    constructor(idPlatna, maksX, maksY){ // dodamo še maksimum po y-osi, ki ga bomo uporabili pri izrisu grafa, prav tako maksX kot maksimalno vrednost po x-osi
+        // "boilerplate" koda za platno
+        this.can2 = document.getElementById(idPlatna); // v html delu poiščemo platno-2, spremenljivka can2 sedaj predstavlja objekt platna
+        this.plat2 =  this.can2.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-2")
+
+        this.maksGrafX = this.can2.width; // določimo maksimalno širino grafa, ki je enaka širini platna
+        this.maksX = maksX; // določimo maksimalno vrednost po x-osi
+        this.maksGrafY = this.can2.height; // določimo maksimalno višino grafa, ki je enaka višini platn
+
+        this.plat2.strokeStyle = "#ff0000"; // določimo barvo črte, hex oblika #rrggbb
+        this.plat2.lineWidth = 2; // povečamo debelino črte na 2px
+
+        this.x = new Array(); // deklariramo "array" oz. polje x, lahko bi zapisali tudi x = []; oglati oklepaji označujejo spremenljivko tipa "array"
+        this.y = new Array(); // deklariramo "array" oz. polje y, lahko bi zapisali tudi y = []; oglati oklepaji označujejo spremenljivko tipa "array"
+
+        this.širinaGrafa = this.can2.width; // maksimum po x-osi je enak širini platna
+
+        // inicializacija vrednosti v "array-u" x
+        for(let i=0; i<this.maksX; i++){ // tokrat bo maksX določal število točk v "array-u" x
+            this.x[i] = i; // za x zapišemo vrednosti [0, 1, 2, ...], t.j. vrednosti i-ja
+        }
+
+        this.maksY = maksY; // maksimalna vrednost, ki jo želimo prikazati na platnu
+    }
+
+    dodajVrednostAliBrišiInDodaj(yVrednost){
+        // če je vektor y poln, odstranimo prvi element in dodamo nov naključni element na konec vektorja y, podobno kot v prejšnjem primeru
+        if(this.y.length >= this.maksX + 1){ // če je platno 10x10 imamo 11x11 točk, zato je tukaj +1
+            this.y.shift() // odstranimo prvi element iz "array-a"
+            this.y.push(yVrednost); // na konec "array-a" y dodamo novo naključno vrednost med 0 in 100    
+        }
+        else{
+            this.y.push(yVrednost); // dokler "array" y ni poln vanj dodajamo oz. potiskamo ("push") nove naključne vrednosti med 0 in 100
+        }
+    }
+
+    izriši(yVrednost){
+        this.dodajVrednostAliBrišiInDodaj(yVrednost); // dodamo novo vrednost v "array" y
+
+        // brišemo platno
+        this.plat2.clearRect(0, 0, this.can2.width, this.can2.height);
+
+        this.plat2.beginPath();
+
+        for(let i=0; i<this.y.length; i++){
+            this.plat2.lineTo((this.x[i]/this.maksX) * this.can2.width, this.can2.height - (this.y[i]/this.maksY) * this.can2.height); // ker je y os orientirana v smeri navzdol moramo pretvoriti vrednosti, npr. iz 10 -> 90 | 100 - 10 = 90 | skaliramo y vrednosti na višino platna t.j. can2.height | skaliramo tudi x vrednosti na širino platna t.j. can2.width
+        }   
+
+        this.plat2.stroke(); // za prikaz črte na platnu
+
+        this.plat2.font = "11px Arial"; // določimo font za izpis besedila na platno
+        this.plat2.fillText("500", 5, 10); // izpišemo besedilo "100" ("sto") na platno na koordinatah (x=5, y=10)
+        this.plat2.fillText("0", 5, 95);
+        this.plat2.fillText("Število rdečih agentov", 30, 10); // izpišemo besedilo "Naključne vrednosti med 0 in 100" na platno na koordinatah (x=50, y=10)
+        this.plat2.fillText("<- 0 | 5000 ->", 410, 95); // izpišemo besedilo "<- 0 | 3500 ->" kot oznako x-osi
+
+        // dodamo rdeči kvadratek in črto desno od besedila
+        const textWidth = this.plat2.measureText("Število rdečih agentov").width;
+        const xKoordinataLegende = 25 + textWidth + 8; // 8 točk od roba napisa
+        const yKoordinataLegende = 2;
+
+        this.plat2.fillStyle = "#ff0000";
+        this.plat2.fillRect(xKoordinataLegende, yKoordinataLegende, 10, 10); // kvadratek
+        this.plat2.beginPath();
+		this.plat2.moveTo(xKoordinataLegende + 14, yKoordinataLegende + 5);
+		this.plat2.lineTo(xKoordinataLegende + 34, yKoordinataLegende + 5);
+		this.plat2.stroke();
+        this.plat2.fillStyle = "#000000";
+    }
+}
+
+// ************************************************************
+// razred GrafPovprečja za izris grafa s številom trkov na čas
+// ************************************************************
+class GrafPovprečja{ // deklaracija razreda Graf
+    constructor(idPlatna, maksGrafX, maksGrafY, dolžinaOkna){
+        // "boilerplate" koda za platno
+        this.can2 = document.getElementById(idPlatna); // v html delu poiščemo platno-2, spremenljivka can2 sedaj predstavlja objekt platna
+        this.plat2 =  this.can2.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-2")
+
+        this.širinaPlatna = this.can2.width; // določimo maksimalno širino grafa, ki je enaka širini platna
+        this.višinaPlatna = this.can2.height; // določimo maksimalno višino grafa, ki je enaka višini platn
+
+        this.maksGrafX = maksGrafX; // maksimum po x-osi
+        this.maksGrafY = maksGrafY; // maksimum po y-osi
+
+        this.yOkno = new Array(); // polje ("array") za okno y vrednosti za izračun drsečega povprečja
+        this.povprečnaVrednost = 0; // povprečna vrednost v oknu
+        this.dolžinaOkna = dolžinaOkna; // dolžino okna pridobimo preko argumenta konstruktorja
+
+        this.plat2.strokeStyle = "#ff0000"; // določimo barvo črte, hex oblika #rrggbb
+
+        this.x = new Array(); // deklariramo "array" oz. polje x, lahko bi zapisali tudi x = []; oglati oklepaji označujejo spremenljivko tipa "array"
+        this.y = new Array(); // deklariramo "array" oz. polje y, lahko bi zapisali tudi y = []; oglati oklepaji označujejo spremenljivko tipa "array"
+
+        // inicializacija vrednosti v "array-u" x
+        for(let i=0; i<this.maksGrafX + 1; i++){
+            this.x[i] = i; // za x zapišemo vrednosti [0, 1, 2, ...], t.j. vrednosti i-ja
+        }
+    }
+
+    dodajVrednostAliBrišiInDodaj(yVrednost){
+
+    this.yOkno.push(yVrednost); // v okno y potisnemo vrednost posredovano preko argumenta funkcije dodajVrednostAliBrišiInDodaj()
+
+    if(this.yOkno.length == this.dolžinaOkna + 1){ // če je okno polno, odstranimo prvi element in izračunamo povprečje
+        this.yOkno.shift(); // odstranimo prvi element iz "array-a"
+        let vsota = 0; // spremenljivka za vsoto vrednosti v oknu
+        for(let i=0; i<this.yOkno.length; i++){
+            vsota += this.yOkno[i]; // seštejemo vse vrednosti v oknu
+        }
+        this.povprečnaVrednost = vsota / this.yOkno.length; // izračunamo drseče povprečje 
+        }
+        else {
+            this.povprečnaVrednost = 0; // do zapolnitve dolžine okna, t.j. npr. dokler ne napolnimo 50 vrednosti vrnemo vrednost 0
+        }
+
+        // če je vektor y poln, odstranimo prvi element in dodamo nov naključni element na konec vektorja y, podobno kot v prejšnjem primeru
+        if(this.y.length >= this.maksGrafX + 1){ // če je platno 10x10 imamo 11x11 točk, zato je tukaj +1
+            this.y.shift() // odstranimo prvi element iz "array-a"
+            this.y.push(this.povprečnaVrednost); // na konec "array-a" y dodamo novo naključno vrednost med 0 in 100    
+        }
+        else{
+            this.y.push(this.povprečnaVrednost); // dokler "array" y ni poln vanj dodajamo oz. potiskamo ("push") nove naključne vrednosti med 0 in 100
+        }
+    }
+
+    izriši(yVrednost){
+        this.dodajVrednostAliBrišiInDodaj(yVrednost); // dodamo novo vrednost v "array" y
+
+        // brišemo platno
+        this.plat2.clearRect(0, 0, this.širinaPlatna, this.višinaPlatna);
+
+        this.plat2.beginPath();
+
+        for(let i=0; i<this.y.length; i++){
+            this.plat2.lineTo(this.x[i]/this.maksGrafX*this.širinaPlatna, this.višinaPlatna - this.y[i]/this.maksGrafY*this.višinaPlatna); // ker je y os orientirana v smeri navzdol moramo pretvoriti vrednosti, npr. iz 10 -> 90 | 100 - 10 = 90 | tokrat namesto fiksne vrednosti 100 uporabimo lastnost   višine platna t.j. can2.height
+        }   
+
+        this.plat2.stroke(); // za prikaz črte na platnu
+    }
+}
+
+// ****************************************************************************
+// razred GrafDiskretnihVrednosti za izris števila trkov v posameznem koraku
+// ****************************************************************************
+class GrafDiskretnihVrednosti{ // deklaracija razreda GrafDiskretnihVrednosti
+    constructor(idPlatna, maksGrafX, maksGrafY){
+        // "boilerplate" koda za platno
+        this.can2 = document.getElementById(idPlatna); // v html delu poiščemo platno-2, spremenljivka can2 sedaj predstavlja objekt platna
+        this.plat2 =  this.can2.getContext("2d"); // od tu dalje delamo s spremenljivko plat1 (za izris na platnu z id "platno-2")
+
+        this.širinaPlatna = this.can2.width; // določimo maksimalno širino grafa, ki je enaka širini platna
+        this.višinaPlatna = this.can2.height; // določimo maksimalno višino grafa, ki je enaka višini platn
+
+        this.maksGrafX = maksGrafX; // maksimum po x-osi
+        this.maksGrafY = maksGrafY; // maksimum po y-osi
+
+        this.plat2.strokeStyle = "#ff0000"; // določimo barvo črte, hex oblika #rrggbb
+
+        this.x = new Array(); // deklariramo "array" oz. polje x, lahko bi zapisali tudi x = []; oglati oklepaji označujejo spremenljivko tipa "array"
+        this.y = new Array(); // deklariramo "array" oz. polje y, lahko bi zapisali tudi y = []; oglati oklepaji označujejo spremenljivko tipa "array"
+
+        // inicializacija vrednosti v "array-u" x
+        for(let i=0; i<this.maksGrafX + 1; i++){
+            this.x[i] = i; // za x zapišemo vrednosti [0, 1, 2, ...], t.j. vrednosti i-ja
+        }
+    }
+
+    dodajVrednostAliBrišiInDodaj(yVrednost){
+
+        // če je vektor y poln, odstranimo prvi element in dodamo nov naključni element na konec vektorja y, podobno kot v prejšnjem primeru
+        if(this.y.length >= this.maksGrafX + 1){ // če je platno 10x10 imamo 11x11 točk, zato je tukaj +1
+            this.y.shift() // odstranimo prvi element iz "array-a"
+            this.y.push(yVrednost); // na konec "array-a" y dodamo novo naključno vrednost med 0 in 100    
+        }
+        else{
+            this.y.push(yVrednost); // dokler "array" y ni poln vanj dodajamo oz. potiskamo ("push") nove naključne vrednosti med 0 in 100
+        }
+    }
+
+    izriši(yVrednost){
+        this.dodajVrednostAliBrišiInDodaj(yVrednost); // dodamo novo vrednost v "array" y
+
+        // brišemo platno
+        this.plat2.clearRect(0, 0, this.širinaPlatna, this.višinaPlatna);
+
+        this.plat2.beginPath();
+
+        for(let i=0; i<this.y.length; i++){
+            this.plat2.moveTo(this.x[i]/this.maksGrafX*this.širinaPlatna, this.višinaPlatna); // začetek izrisa navpične črte
+            this.plat2.lineTo(this.x[i]/this.maksGrafX*this.širinaPlatna, this.višinaPlatna - (this.y[i]/this.maksGrafY) * this.višinaPlatna);
+            // ker je os y orientirana v smeri navzdol moramo pretvoriti vrednosti, npr. iz 90 -> 10 | 100-90=10 | x in y skaliramo na dimenzijo platna
+        }   
+
+        this.plat2.stroke(); // za prikaz črte na platnu
+    }
+}
+
+// funkcija, ki preveri bližino agentov
+// določimo razdaljo med agenti
+// preverimo razdaljo vsakega agenta z vsakim agentom
+// v primeru, da sta agenta blizu, glede na podano razdljo trka
+// izvedemo trk
+function preveriBližinoAgentov(){
+
+    agentiTabela.forEach(function(agent){
+        agent.trk = 0; // ob vsakem koraku ponastavimo atribut trka za vse agente na 0
+    });
+
+    številoTrkovVkoraku = 0; // števec postavimo na 0 ~ ob vsakem koraku ga ponastavimo na 0
+    številoTrkovRdečegaZzelenimVkoraku = 0; // ponastavitev števca trkov rdeč-zelen na 0 ob vsakem koraku
+    for(let i=0; i<številoAgentov; i++){
+        let A = agentiTabela[i]; // uvedemo novo spremenljivko A zaradi berljivosti kode
+        for(let j=i+1; j<številoAgentov; j++){
+            let B = agentiTabela[j]; // uvedemo novo spremenljivko B zaradi berljivosti kode
+            let dx = B.x - A.x; // razdalja med agentoma po x koordinati
+            let dy = B.y - A.y; // razdalja med agentoma po y koordinati
+            let razdalja = Math.sqrt(dx*dx + dy*dy); // izračunamo razdaljo med agenttoma A in B po Pitagorovem izreku
+
+            // če je razdalja med agentoma manjša 10 od izvedemo trk
+            if(razdalja < 10){ // če je pogoj, da sta agenta dovolj blizu, izpolnjen
+                A.trk = 1; // označimo, da je agent A trčil
+                B.trk = 1; // označimo, da je agent B trčil
+                številoTrkovVkoraku++; // povečamo števec trkov v koraku za 1
+                izvediTrk(i, j); // izvedemo trk med agentoma z indeksoma i in j
+            } 
+        }
+    }
+
+    return številoTrkovVkoraku; // funkcija preveriBližinoAgentov() na koncu vrne število trkov v koraku
+}
+
+// funkcija, ki izvede trk med agentoma z indeksoma i in j
+function izvediTrk(indeksPrvega, indeksDrugega){
+    let x1 = agentiTabela[indeksPrvega].x; // preberemo x koordinato prvega agenta, uvedemo novo spremenljivko x1 zaradi berljivosti kode
+    let y1 = agentiTabela[indeksPrvega].y; // preberemo y koordinato prvega agenta, uvedemo novo spremenljivko y1 zaradi berljivosti kode
+    let x2 = agentiTabela[indeksDrugega].x; // preberemo x koordinato drugega agenta, uvedemo novo spremenljivko x2 zaradi berljivosti kode
+    let y2 = agentiTabela[indeksDrugega].y; // preberemo y koordinato drugega agenta, uvedemo novo spremenljivko y2 zaradi berljivosti kode
+    let dx = x2 - x1; // razdalja med agentoma po x koordinati
+    let dy = y2 - y1; // razdalja med agentoma po y koordinati
+    let razdalja = Math.sqrt(dx*dx + dy*dy); // izračunamo razdaljo med agentoma A in B po Pitagorovem izreku
+    let razdaljaOdboja = 6; // razdalja, ki določa za koliko se agenta ob trku odbijeta oz. razmakneta drug od drugega po veznici 
+
+    // izračunamo normalizirano razdaljo med agentoma
+    let normX = dx / razdalja; // normalizirana razdalja po x koordinati
+    let normY = dy / razdalja; // normalizirana razdalja po y koordinati
+
+    // določimo sredinsko točko
+    let sredinskaTočkaX = (x1 + x2) / 2; // sredinska točka po x koordinati
+    let sredinskaTočkaY = (y1 + y2) / 2; // sredinska točka po y koordinati
+
+    // določimo nove pozicije
+    agentiTabela[indeksPrvega].x = sredinskaTočkaX - normX * razdaljaOdboja; // nova x koordinata prvega agenta po trku
+    agentiTabela[indeksPrvega].y = sredinskaTočkaY - normY * razdaljaOdboja; // nova y koordinata prvega agenta po trku
+    agentiTabela[indeksDrugega].x = sredinskaTočkaX + normX * razdaljaOdboja; // nova x koordinata drugega agenta po trku
+    agentiTabela[indeksDrugega].y = sredinskaTočkaY + normY * razdaljaOdboja; // nova y koordinata drugega agenta po trku
+
+    // izmenjamo hitrosti med agentoma
+    let tempXVel = agentiTabela[indeksPrvega].xVel; // shranimo x hitrost prvega agenta v začasno spremenljivko
+    let tempYVel = agentiTabela[indeksPrvega].yVel; // shranimo y hitrost prvega agenta v začasno spremenljivko
+    agentiTabela[indeksPrvega].xVel = agentiTabela[indeksDrugega].xVel; // x hitrost prvega agenta postane x hitrost drugega agenta
+    agentiTabela[indeksPrvega].yVel = agentiTabela[indeksDrugega].yVel; // y hitrost prvega agenta postane y hitrost drugega agenta
+    agentiTabela[indeksDrugega].xVel = tempXVel; // x hitrost drugega agenta postane x hitrost prvega agenta (iz začasne spremenljivke)
+    agentiTabela[indeksDrugega].yVel = tempYVel; // y hitrost drugega agenta postane y hitrost prvega agenta (iz začasne spremenljivke)
+
+    // del kode, ki prenese rdečo barvo na zelenega, npr. simulacija prenosa okužbe (ali informacije)
+    // če trčita rdeči in zeleni, zeleni postane rdeč
+    // če je prvi rdeč ("ff0000") in drugi zelen ("00ff00")
+    if(agentiTabela[indeksPrvega].barva == "#ff0000" && agentiTabela[indeksDrugega].barva == "#00ff00"){
+        agentiTabela[indeksDrugega].barva = "#ff0000"; // drugega agenta, ki je bil zelen pobarvamo rdeče
+        številoTrkovRdečegaZzelenimVkoraku++; // povečamo števec trkov rdeč-zelen za 1
+    }
+
+    // če je prvi zelen ("#00ff00") in drugi rdeč ("#ff0000")
+    if(agentiTabela[indeksPrvega].barva == "#00ff00" && agentiTabela[indeksDrugega].barva == "#ff0000"){
+        agentiTabela[indeksPrvega].barva = "#ff0000"; // prvega agenta, ki je bil zelen pobarvamo rdeče
+        številoTrkovRdečegaZzelenimVkoraku++; // povečamo števec trkov rdeč-zelen za 1
+    }
+}
+
+function izrišiAgente(agenti){
+    agenti.forEach(function(agent){ 
+        if(agent.barva == "#ff0000"){ // če je agent rdeče barve
+            števecRdečih++; // števec rdečih povečamo za 1
+        }
+        if(agent.barva == "#00ff00"){ // če je agent zelene barve
+            števecZelenih++; // števec zelenih povečamo za 1
+        }
+
+        plat1.fillStyle = agent.barva; // preberemo barvo iz članske spremenljivke barva
+        plat1.fillRect(agent.x, agent.y, 10, 10); // x zg. L kot, y zg. L kot, širina, višina
+
+        if(agent.trk == 1){
+            // izrišemo modri okvir v primeru trka
+            plat1.beginPath();
+            plat1.lineWidth = "3"; // debelina črte
+            plat1.strokeStyle = "blue";
+            plat1.rect(agent.x, agent.y, 10, 10);
+            plat1.stroke();
+        }
+
+    });
+}
+
+function zanka(){
+    // števca rdečih in zelenih postavimo na 0
+    števecRdečih = 0;
+    števecZelenih = 0;
+
+    //let številoTrkov = preveriBližinoAgentov();
+    let številoTrkov = preveriBližinoAgentov();
+
+    plat1.clearRect(0, 0, can1.width, can1.height); // brišemo celotno platno
+
+    // izpišemo število trkov
+    document.getElementById("število-trkov-v-koraku").value = številoTrkov; // preverimo bližino agentov in izvedemo trke, če je potrebno
+
+    for(let i=0; i<agentiTabela.length; i++){
+        agentiTabela[i].osveži(); // preračunamo koordinate ter upoštevamo odboj od robov
+    }
+
+    izrišiAgente(agentiTabela); // izrišemo agente, tokrat s pomočjo funkcije
+
+    čas++; // čas ob vsakem klicu funkcije zanka za ena povečamo
+    document.getElementById("polje-s-časom").value = čas;
+    document.getElementById("število-rdečih").value = števecRdečih;
+    document.getElementById("število-zelenih").value = števecZelenih;
+
+    graf1.izriši(števecRdečih); // na grafu izrišemo število rdečih agentov
+    graf2.izriši(številoTrkovRdečegaZzelenimVkoraku); // na grafu izrišemo število trkov rdeč-zelen (prenos lastnosti, npr. okužbe ali informacije)
+    graf3.izriši(številoTrkov);
+
+    if(čas >= stopČas){ // če bo čas večji kot stopČas - prebrano iz vmesnika
+        stop(); // ustavimo funkcijo setTimeout()
+        return; // skočimo ven iz funkcije zanka() (preskočimo vrstico časovnik = setTimeout...)
+    }
+
+    if(stikaloKoračniZagon == 1){ // če smo v modusu koračnega zagona
+        clearTimeout(časovnik);
+    }
+
+}
+
+for(let i=0; i<številoAgentov; i++){
+    // kreiramo agente v tabeli agentiTabela z naključnimi koordinatami in naključnimi hitrostmi med -0.5 in +0.5
+    agentiTabela[i] = new Agent(Math.random()*(can1.width - 10), Math.random()*(can1.height - 10), Math.random() - 0.5, Math.random() - 0.5, "#00ff00"); // ustvarimo agenta pod indeksom [i] v tabeli agentiTabela na na naključnih koordinatah x=[0-širina platna], y=[0-višina platna], xVel=[-0.5, 0.5], yVel=[-0.5, 0.5], barva 00ff00 (zeleno)
+}
+
+agentiTabela[0].barva = "#ff0000"; // spremenimo barvo prvega agenta na rdečo
+
+graf1 = new Graf("platno-2", 5000, 500); // ustvarimo objekt razreda Graf, ki bo uporabljen za izris grafa na platnu z id "platno-2" || drugi argument je maksimalna vrednost po x-osi grafa, tretji argument je maksimalna vrednost po y-osi grafa
+
+graf2 = new GrafPovprečja("graf-2", 5000, 0.5, 300); // arg.: 1: id platna, 2: maksX, 3: maksY, 4: dolžina okna
+
+graf3 = new GrafDiskretnihVrednosti("graf-3", 500, 10); // ustvarimo nov objekt z imenom graf3 razreda GrafDiskretnihVrednosti
+
+// funkcija, ki preverja ali je bil gumb Štart že enkrat pritisnjen
+// če je bil že pritisnjen preprečimo ponovni zagon časovnika
+
+function štartGumb(){
+    stopČas = document.getElementById("stop-čas").value; // prekinitveni čas preberemo iz uporabniškega vmesnika
+    if(gumbŠtartPritisnjen == 0){ // če gumb za zagon še ni bil pritisnjen
+        gumbŠtartPritisnjen = 1; // postavimo vrednost na 1, da je bil gumb pritisnjen
+        štart(); // poženemo zanko
+    }
+}
+
+// funkcija za zagon modela
+function štart(){
+    zanka(); // klic funkcije zanka()
+    
+    if(čas < stopČas){
+        časovnik = setTimeout(štart, 5); // po določenem številu ms se izvede funkcija štart(), le-ta kliče funkcijo zanka()
+    }
+    else{
+        stop();
+    }
+    
+}
+
+// funkcija za zaustavitev modela
+function stop(){
+    clearTimeout(časovnik); // v objektu časovnik imamo Timer (nastavljen s setTimeout)
+    gumbŠtartPritisnjen = 0; // gumb Štart ni več aktiven; lahko ga ponovno pritisnemo
+}
+
+// funkcija za koračni zagon
+function koračniZagon(){
+    stikaloKoračniZagon = 1;
+    zanka();
+}
+
+</script>
+
+</body>
+</html>
